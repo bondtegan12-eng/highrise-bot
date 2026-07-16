@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 from aiohttp import web
 from highrise import BaseBot, Position, CurrencyItem
 from highrise.models import SessionMetadata, User
@@ -36,8 +37,6 @@ class MyBot(BaseBot):
                 pass
 
     async def on_start(self, session_metadata: SessionMetadata) -> None:
-        # Starts the keep-alive web server right as the bot logs into the room
-        asyncio.create_task(start_web_server())
         asyncio.create_task(self.announce_loop())
 
     async def on_chat(self, user: User, message: str) -> None:
@@ -73,3 +72,21 @@ class MyBot(BaseBot):
                 self.vip_users.add(sender.id)
                 await self.highrise.send_whisper(sender.id, "🎉 Thank you for the tip! You have unlocked the !vip lounge for this session.")
                 await self.highrise.chat(f"🌟 {sender.username} just tipped 500g and unlocked VIP status! 🌟")
+
+# This custom launcher bypasses the command line and forces the variables into the SDK
+if __name__ == "__main__":
+    from highrise.__main__ import main, BotDefinition
+    
+    loop = asyncio.get_event_loop()
+    loop.create_task(start_web_server())
+    
+    # Check both uppercase and lowercase setups on Render
+    room = os.environ.get("ROOM_ID") or os.environ.get("room_id")
+    token = os.environ.get("API_TOKEN") or os.environ.get("api_token")
+    
+    if not room or not token:
+        print("❌ Error: Missing ROOM_ID or API_TOKEN environment variables in Render dashboard.")
+        sys.exit(1)
+        
+    definitions = [BotDefinition(MyBot(), room, token)]
+    loop.run_until_complete(main(definitions))
