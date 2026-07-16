@@ -11,13 +11,12 @@ async def start_web_server():
     runner = web.AppRunner(app)
     await runner.setup()
     
-    # Render forces you to use their specific assigned port
+    # Read the exact port Render expects from your dashboard variable
     port = int(os.environ.get("PORT", 8080)) 
     
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     print(f"🌍 Keep-Alive web system securely active on port {port}!")
-
 
 # --- THE UN-CRASHABLE BOT LOGIC ---
 class MyBot(BaseBot):
@@ -32,17 +31,15 @@ class MyBot(BaseBot):
         self.vip_area = Position(x=15, y=9, z=18, facing="Front")
 
     async def on_start(self, session_metadata: SessionMetadata) -> None:
-        asyncio.create_task(start_web_server())
+        pass  # Clean and empty to prevent double-starting errors
 
     async def on_chat(self, user: User, message: str) -> None:
-        # Isolated execution: Wrap everything in a shield so errors CANNOT kick the bot
         try:
             username_clean = str(user.username).lower().strip()
             msg_clean = message.lower().strip()
 
             # --- 1. MODERATOR LOUNGE COMMAND ---
             if msg_clean == "!mod":
-                # Direct check: Only you (the owner) can use this command. No complex server checks.
                 if username_clean == "sexytegann" or username_clean == "bondtegan":
                     await self.highrise.teleport(user.id, self.mod_area)
                     await self.highrise.chat(f"Teleported Owner {user.username} to the Moderator Lounge!")
@@ -51,7 +48,6 @@ class MyBot(BaseBot):
 
             # --- 2. DJ STAGE COMMAND ---
             elif msg_clean == "!dj":
-                # Direct check: Only nxmb_ or yourself can use this command.
                 if username_clean == "nxmb_" or username_clean == "sexytegann" or username_clean == "bondtegan":
                     await self.highrise.teleport(user.id, self.dj_area)
                     await self.highrise.chat(f" Welcome to the stage, DJ {user.username}!")
@@ -60,7 +56,6 @@ class MyBot(BaseBot):
 
             # --- 3. VIP LOUNGE COMMAND ---
             elif msg_clean == "!vip":
-                # If they tipped 500g or if they are you, let them in natively
                 if user.id in self.vip_users or username_clean == "sexytegann" or username_clean == "bondtegan":
                     await self.highrise.teleport(user.id, self.vip_area)
                 else:
@@ -81,20 +76,20 @@ class MyBot(BaseBot):
 
 if __name__ == "__main__":
     from highrise.__main__ import main, BotDefinition
-
-    
     
     loop = asyncio.get_event_loop()
+    
+    # Start the web server first so Render detects the open port immediately
+    loop.run_until_complete(start_web_server())
+    
     room = os.environ.get("room_id")
     token = os.environ.get("api_token")
         
     definitions = [BotDefinition(MyBot(), room, token)]
-        # Safe loop launcher to prevent Multilogin crashes
+        
     while True:
         try:
             loop.run_until_complete(main(definitions))
         except Exception as e:
             print(f"Connection dropped: {e}. Waiting 20 seconds to clear ghost bots safely...")
-            # Forces the script to sleep so Render doesn't flood Highrise with connections
             time.sleep(20)
-
