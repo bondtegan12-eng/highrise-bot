@@ -81,8 +81,8 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.create_task(start_web_server())
     
-     room_id = os.environ.get("ROOM_ID")
-    api_token = os.environ.get("API_TOKEN")
+   room_id = os.environ.get("ROOM_ID")
+   api_token = os.environ.get("API_TOKEN")
 
     
     if not room_id or not api_token:
