@@ -42,20 +42,47 @@ class MyBot(BaseBot):
         message = message.lower().strip()
 
         # --- SECRET COORDINATE FINDER COMMAND ---
+       async def on_chat(self, user: User, message: str) -> None:
+        message = message.lower().strip()
+
+        # --- 1. COORDINATE TRACKER COMMAND ---
         if message == "!coords":
             try:
-                # Ask the room for your exact current position
                 room_users = await self.highrise.get_room_users()
                 for room_user, position in room_users.content:
                     if room_user.id == user.id:
-                        # The bot whispers the exact numbers right to you!
                         await self.highrise.send_whisper(user.id, f"📍 Your Coords: x={position.x}, y={position.y}, z={position.z}")
                         return
             except Exception as e:
                 print(f"Error finding coords: {e}")
+                return
 
-    async def on_chat(self, user: User, message: str) -> None:
-        message = message.lower().strip()
+        # --- 2. MODERATOR LOUNGE COMMAND ---
+        elif message == "!mod":
+            privilege_response = await self.highrise.get_room_privilege(user.id)
+            is_mod = privilege_response.content.moderator or privilege_response.content.owner
+            
+            is_crew = False
+            try:
+                user_info = await self.highrise.get_user_info(user.id)
+                if getattr(user_info.content, 'crew_id', None) == self.crew_id:
+                    is_crew = True
+            except Exception:
+                pass
+
+            if is_mod or is_crew:
+                await self.highrise.teleport_user(user.id, self.mod_area)
+                await self.highrise.chat(f" Teleported {user.username} to the Moderator Lounge!")
+            else:
+                await self.highrise.chat(f" Sorry {user.username}, this command is strictly for Crew & Mods.")
+
+        # --- 3. VIP LOUNGE COMMAND ---
+        elif message == "!vip":
+            if user.id in self.vip_users:
+                await self.highrise.teleport_user(user.id, self.vip_area)
+            else:
+                await self.highrise.chat(f" You haven't unlocked VIP yet, {user.username}! Tip 500g to unlock.")
+
 
         if message == "!mod":
             privilege_response = await self.highrise.get_room_privilege(user.id)
