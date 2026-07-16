@@ -29,67 +29,52 @@ class MyBot(BaseBot):
         self.dj_area = Position(x=16, y=0, z=24, facing="FrontRight")
         self.crew_id = "69bf2d0c5654e2325acf9318"
 
-    async def announce_loop(self):
-        while True:
+    async def on_start(self, session_metadata: SessionMetadata) -> None:
+        asyncio.create_task(start_web_server())
+
+    async def on_chat(self, user: User, message: str) -> None:
+        # Standard bulletproof extraction matching Highrise API requirements
+        username_lower = user.username.lower()
+        msg_lower = message.lower().strip()
+
+        # --- 1. EXCLUSIVE DJ BOOTH COMMAND ---
+        if msg_lower == "!dj":
+            if username_lower == "nxmb_" or username_lower == "sexytegann" or username_lower == "bondtegan":
+                await self.highrise.teleport_user(user.id, self.dj_area)
+                await self.highrise.chat(f"🎧 Welcome to the stage, DJ {user.username}!")
+                return
+            else:
+                await self.highrise.chat(f"Sorry {user.username}, the DJ Booth is reserved exclusively for @nxmb_")
+                return
+
+        # --- 2. MODERATOR LOUNGE COMMAND ---
+        elif msg_lower == "!mod":
+            # Direct Owner check - skips all external lookups entirely
+            if username_lower == "sexytegann" or username_lower == "bondtegan":
+                await self.highrise.teleport_user(user.id, self.mod_area)
+                await self.highrise.chat(f"Teleported Owner {user.username} to the Moderator Lounge!")
+                return
+
+            # Fallback check for Crew members
             try:
-                await asyncio.sleep(120)
-                await self.highrise.chat("welcome to bambs bday bash, vip is 500g to the bot please")
+                user_info = await self.highrise.get_user_info(user.id)
+                if hasattr(user_info, 'crew_id') and user_info.crew_id == self.crew_id:
+                    await self.highrise.teleport_user(user.id, self.mod_area)
+                    await self.highrise.chat(f"Teleported Crew Member {user.username} to the Moderator Lounge!")
+                    return
             except Exception:
                 pass
 
-    async def on_start(self, session_metadata: SessionMetadata) -> None:
-        asyncio.create_task(self.announce_loop())
+            await self.highrise.chat(f"Sorry {user.username}, this command is strictly for Crew & Mods.")
+            return
 
-    async def on_chat(self, user: User, message: str) -> None:
-        try:
-            # Safely grab the username no matter how the object is passed
-            username_str = getattr(user, 'username', '').lower().strip()
-            msg_str = message.lower().strip()
-
-            # --- 1. EXCLUSIVE DJ BOOTH COMMAND ---
-            if msg_str == "!dj":
-                if "nxmb_" in username_str or "sexytegann" in username_str or "bondtegan" in username_str:
-                    await self.highrise.teleport_user(user.id, self.dj_area)
-                    await self.highrise.chat(f"🎧 Welcome to the stage, DJ {user.username}!")
-                    return
-                else:
-                    await self.highrise.chat(f"Sorry {user.username}, the DJ Booth is reserved exclusively for @nxmb_")
-                    return
-
-            # --- 2. MODERATOR LOUNGE COMMAND ---
-            elif msg_str == "!mod":
-                # Master Override Check: If it is YOU, teleport instantly and ignore everything else
-                if "sexytegann" in username_str or "bondtegan" in username_str:
-                    await self.highrise.teleport_user(user.id, self.mod_area)
-                    await self.highrise.chat(f"Teleported Owner {user.username} to the Moderator Lounge!")
-                    return
-
-                # Check if the player belongs to your specific crew ID
-                is_crew = False
-                try:
-                    user_info = await self.highrise.get_user_info(user.id)
-                    if getattr(user_info, 'crew_id', None) == self.crew_id:
-                        is_crew = True
-                except Exception:
-                    pass
-
-                if is_crew:
-                    await self.highrise.teleport_user(user.id, self.mod_area)
-                    await self.highrise.chat(f"Teleported {user.username} to the Moderator Lounge!")
-                else:
-                    await self.highrise.chat(f"Sorry {user.username}, this command is strictly for Crew & Mods.")
-                return
-
-            # --- 3. VIP LOUNGE COMMAND ---
-            elif msg_str == "!vip":
-                if user.id in self.vip_users:
-                    await self.highrise.teleport_user(user.id, self.vip_area)
-                else:
-                    await self.highrise.chat(f"You haven't unlocked VIP yet, {user.username}! Tip 500g to unlock.")
-                return
-
-        except Exception as e:
-            print(f"Error handling chat command block: {e}")
+        # --- 3. VIP LOUNGE COMMAND ---
+        elif msg_lower == "!vip":
+            if user.id in self.vip_users:
+                await self.highrise.teleport_user(user.id, self.vip_area)
+            else:
+                await self.highrise.chat(f"You haven't unlocked VIP yet, {user.username}! Tip 500g to unlock.")
+            return
 
     async def on_tip(self, sender: User, receiver: User, tip: CurrencyItem) -> None:
         if receiver.id == self.id and tip.type == "gold":
@@ -105,8 +90,6 @@ if __name__ == "__main__":
     os.environ["room_id"] = "64a094a74134ad0fd77b8734"
     
     loop = asyncio.get_event_loop()
-    loop.create_task(start_web_server())
-    
     room = os.environ.get("room_id")
     token = os.environ.get("api_token")
         
