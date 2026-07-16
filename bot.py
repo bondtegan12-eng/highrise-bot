@@ -24,8 +24,9 @@ class MyBot(BaseBot):
     def __init__(self):
         super().__init__()
         self.vip_users = set() 
-        self.mod_area = Position(x=7.0, y=9.25, z=23.51, facing="Front")
-        self.vip_area = Position(x=15.01, y=9.25, z=17.99, facing="Front")
+        self.mod_area = Position(x=7, y=9, z=24, facing="Front")
+        self.vip_area = Position(x=15, y=9, z=18, facing="Front")
+
         self.crew_id = "69bf2d0c5654e2325acf9318"
 
     async def announce_loop(self):
