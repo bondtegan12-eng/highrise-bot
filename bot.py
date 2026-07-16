@@ -4,15 +4,24 @@ from aiohttp import web
 from highrise import BaseBot, Position, CurrencyItem
 from highrise.models import SessionMetadata, User
 
-# --- KEEP-ALIVE WEB SERVER LOGIC ---
+# --- KEEP-ALIVE WEB SERVER LOGIC (AUTO-PORT SWITCHING) ---
 async def start_web_server():
     app = web.Application()
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    print(f"🌍 Keep-Alive server active on port {port}")
+    
+    # Try the main port first, if it fails, fallback to a random open port
+    try:
+        port = int(os.environ.get("PORT", 10000))
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        print(f"🌍 Keep-Alive server active on main port {port}")
+    except OSError:
+        # If port 10000 is already in use by a ghost bot, bind to an open port instead
+        site = web.TCPSite(runner, '0.0.0.0', 0)
+        await site.start()
+        print("🌍 Keep-Alive server active on fallback port to bypass ghost bot clash!")
+
 
 # --- CORE HIGHRISE BOT LOGIC ---
 class MyBot(BaseBot):
