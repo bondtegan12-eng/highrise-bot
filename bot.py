@@ -24,8 +24,10 @@ class MyBot(BaseBot):
     def __init__(self):
         super().__init__()
         self.vip_users = set() 
+        # Clean whole numbers to prevent engine teleport glitches
         self.mod_area = Position(x=7, y=9, z=24, facing="Front")
         self.vip_area = Position(x=15, y=9, z=18, facing="Front")
+        self.dj_area = Position(x=16, y=0, z=24, facing="FrontRight")
         self.crew_id = "69bf2d0c5654e2325acf9318"
 
     async def announce_loop(self):
@@ -46,10 +48,9 @@ class MyBot(BaseBot):
         if message == "!coords":
             try:
                 room_users = await self.highrise.get_room_users()
-                # Updated SDK unpacking loop syntax
                 for item in room_users.content:
-                    room_user = item[0]
-                    position = item[1]
+                    room_user = item
+                    position = item
                     if room_user.id == user.id:
                         await self.highrise.send_whisper(user.id, f"📍 Your Coords: x={position.x}, y={position.y}, z={position.z}")
                         return
@@ -60,9 +61,10 @@ class MyBot(BaseBot):
         # --- 2. MODERATOR LOUNGE COMMAND ---
         elif message == "!mod":
             try:
-                # Custom Owner Override Bypass Block (Catches variations of your name)
                 current_username = user.username.lower()
-                if "bondtegan" in current_username:
+                
+                # Master Owner Bypass Block (Checks for your exact in-game name)
+                if "sexytegann" in current_username or "bondtegan" in current_username:
                     await self.highrise.teleport_user(user.id, self.mod_area)
                     await self.highrise.chat(f"Teleported Owner {user.username} to the Moderator Lounge!")
                     return
@@ -89,7 +91,20 @@ class MyBot(BaseBot):
                 print(f"Error executing !mod command: {e}")
                 await self.highrise.chat("⚠️ An error occurred validating permissions. Please try again.")
 
-        # --- 3. VIP LOUNGE COMMAND ---
+        # --- 3. EXCLUSIVE DJ BOOTH COMMAND ---
+        elif message == "!dj":
+            try:
+                current_username = user.username.lower()
+                # Strictly permits nxmb_ or yourself to access the stage
+                if "nxmb_" in current_username or "sexytegann" in current_username:
+                    await self.highrise.teleport_user(user.id, self.dj_area)
+                    await self.highrise.chat(f"🎧 Welcome to the stage, DJ {user.username}!")
+                else:
+                    await self.highrise.chat(f"Sorry {user.username}, the DJ Booth is reserved exclusively for @nxmb_")
+            except Exception as e:
+                print(f"Error executing !dj command: {e}")
+
+        # --- 4. VIP LOUNGE COMMAND ---
         elif message == "!vip":
             if user.id in self.vip_users:
                 await self.highrise.teleport_user(user.id, self.vip_area)
