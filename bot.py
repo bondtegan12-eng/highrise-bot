@@ -46,7 +46,10 @@ class MyBot(BaseBot):
         if message == "!coords":
             try:
                 room_users = await self.highrise.get_room_users()
-                for room_user, position in room_users:
+                # Updated SDK unpacking loop syntax
+                for item in room_users.content:
+                    room_user = item[0]
+                    position = item[1]
                     if room_user.id == user.id:
                         await self.highrise.send_whisper(user.id, f"📍 Your Coords: x={position.x}, y={position.y}, z={position.z}")
                         return
@@ -57,25 +60,27 @@ class MyBot(BaseBot):
         # --- 2. MODERATOR LOUNGE COMMAND ---
         elif message == "!mod":
             try:
-                # Track user profile information to capture the true owner name
-                user_info = await self.highrise.get_user_info(user.id)
-                
-                # Check for explicit Room Mod permissions
+                # Custom Owner Override Bypass Block (Catches variations of your name)
+                current_username = user.username.lower()
+                if "bondtegan" in current_username:
+                    await self.highrise.teleport_user(user.id, self.mod_area)
+                    await self.highrise.chat(f"Teleported Owner {user.username} to the Moderator Lounge!")
+                    return
+
+                # Check for standard Room Mod permissions
                 privilege_response = await self.highrise.get_room_privilege(user.id)
                 is_mod = getattr(privilege_response, 'moderator', False) or getattr(privilege_response, 'is_owner', False)
                 
-                # Custom Owner Override Bypass Block (Always lets you pass)
-                is_owner_profile = (user.username.lower() == "bondtegan-eng" or user.username.lower() == "bondtegan")
-                
+                # Check if the player belongs to your specific crew ID
                 is_crew = False
                 try:
+                    user_info = await self.highrise.get_user_info(user.id)
                     if getattr(user_info, 'crew_id', None) == self.crew_id:
                         is_crew = True
                 except Exception as e:
-                    print(f"Error checking crew context: {e}")
+                    print(f"Error checking user info on profile lookup: {e}")
 
-                # Execute teleport action if any conditional passes successfully
-                if is_mod or is_crew or is_owner_profile:
+                if is_mod or is_crew:
                     await self.highrise.teleport_user(user.id, self.mod_area)
                     await self.highrise.chat(f"Teleported {user.username} to the Moderator Lounge!")
                 else:
