@@ -24,7 +24,6 @@ class MyBot(BaseBot):
     def __init__(self):
         super().__init__()
         self.vip_users = set() 
-        # Clean whole numbers to prevent engine teleport glitches
         self.mod_area = Position(x=7, y=9, z=24, facing="Front")
         self.vip_area = Position(x=15, y=9, z=18, facing="Front")
         self.crew_id = "69bf2d0c5654e2325acf9318"
@@ -58,25 +57,30 @@ class MyBot(BaseBot):
         # --- 2. MODERATOR LOUNGE COMMAND ---
         elif message == "!mod":
             try:
-                # Updated SDK Properties: using safe lookups for .moderator and .is_owner natively
+                # Track user profile information to capture the true owner name
+                user_info = await self.highrise.get_user_info(user.id)
+                
+                # Check for explicit Room Mod permissions
                 privilege_response = await self.highrise.get_room_privilege(user.id)
                 is_mod = getattr(privilege_response, 'moderator', False) or getattr(privilege_response, 'is_owner', False)
                 
+                # Custom Owner Override Bypass Block (Always lets you pass)
+                is_owner_profile = (user.username.lower() == "bondtegan-eng" or user.username.lower() == "bondtegan")
+                
                 is_crew = False
                 try:
-                    user_info = await self.highrise.get_user_info(user.id)
                     if getattr(user_info, 'crew_id', None) == self.crew_id:
                         is_crew = True
                 except Exception as e:
-                    print(f"Error checking user info on profile lookup: {e}")
+                    print(f"Error checking crew context: {e}")
 
-                if is_mod or is_crew:
+                # Execute teleport action if any conditional passes successfully
+                if is_mod or is_crew or is_owner_profile:
                     await self.highrise.teleport_user(user.id, self.mod_area)
                     await self.highrise.chat(f"Teleported {user.username} to the Moderator Lounge!")
                 else:
                     await self.highrise.chat(f"Sorry {user.username}, this command is strictly for Crew & Mods.")
             except Exception as e:
-                # Safe Error Catching: prevents the bot from crashing out of the room if an error occurs
                 print(f"Error executing !mod command: {e}")
                 await self.highrise.chat("⚠️ An error occurred validating permissions. Please try again.")
 
@@ -97,7 +101,6 @@ class MyBot(BaseBot):
 if __name__ == "__main__":
     from highrise.__main__ import main, BotDefinition
     
-    # Inject credentials directly into system environment variables
     os.environ["api_token"] = "2c001cb06c4370e639be2d7a24cf4e7a0a860ef708d45d11cde0960653d0e8a6"
     os.environ["room_id"] = "64a094a74134ad0fd77b8734"
     
