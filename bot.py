@@ -61,7 +61,7 @@ class MyBot(BaseBot):
         # --- 2. EXCLUSIVE DJ BOOTH COMMAND ---
         elif message == "!dj":
             try:
-                # BULLETPROOF BYPASS: Execute instantly for specific users, bypass all other code lines
+                # INSTANT BYPASS PATH: If it is you or the DJ, teleport immediately and stop
                 if "nxmb_" in current_username or "sexytegann" in current_username or "bondtegan" in current_username:
                     await self.highrise.teleport_user(user.id, self.dj_area)
                     await self.highrise.chat(f"🎧 Welcome to the stage, DJ {user.username}!")
@@ -74,16 +74,13 @@ class MyBot(BaseBot):
         # --- 3. MODERATOR LOUNGE COMMAND ---
         elif message == "!mod":
             try:
-                # BULLETPROOF BYPASS: If it is YOU, teleport instantly and STOP running the rest of this function
+                # INSTANT BYPASS PATH: If it is YOU, teleport immediately and stop
                 if "sexytegann" in current_username or "bondtegan" in current_username:
                     await self.highrise.teleport_user(user.id, self.mod_area)
                     await self.highrise.chat(f"Teleported Owner {user.username} to the Moderator Lounge!")
                     return
 
-                # Regular players hit the permission check below
-                privilege_response = await self.highrise.get_room_privilege(user.id)
-                is_mod = getattr(privilege_response, 'moderator', False) or getattr(privilege_response, 'is_owner', False)
-                
+                # Normal players run this part and check the crew database
                 is_crew = False
                 try:
                     user_info = await self.highrise.get_user_info(user.id)
@@ -92,7 +89,7 @@ class MyBot(BaseBot):
                 except Exception as e:
                     print(f"Error checking user info on profile lookup: {e}")
 
-                if is_mod or is_crew:
+                if is_crew:
                     await self.highrise.teleport_user(user.id, self.mod_area)
                     await self.highrise.chat(f"Teleported {user.username} to the Moderator Lounge!")
                 else:
