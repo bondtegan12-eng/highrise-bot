@@ -9,8 +9,6 @@ import threading
 from pathlib import Path
 
 from highrise import AnchorPosition, BaseBot, Position, User
-from highrise.__main__ import BotDefinition
-from highrise.__main__ import main as run_bots
 
 # --- WEB SERVER WORKAROUND FOR RENDER FREE ---
 class KeepAliveServer(http.server.SimpleHTTPRequestHandler):
@@ -31,7 +29,6 @@ threading.Thread(target=run_web_server, daemon=True).start()
 
 # --- HIGHRISE HARDCODED CONFIGURATION ---
 ROOM_ID = "64a094a74134ad0fd77b8734"
-API_TOKEN = "2c001cb06c4370e639be2d7a24cf4e7a0a860ef708d45d11cde0960653d0e8a6"
 CREW_ID = "69bf2d0c5654e2325acf9318"
 OWNER_USER_ID = "61ccb2a0fa2db3178100252c"
 VIP_TIP_THRESHOLD_GOLD = 500
@@ -121,17 +118,6 @@ class TeleportBot(BaseBot):
             new_total = self._add_tip(sender.id, tip.amount)
             if new_total >= VIP_TIP_THRESHOLD_GOLD:
                 await self.highrise.chat(f"🎉 @{sender.username} has unlocked permanent VIP access by reaching {new_total}g tipped!")
-
-# --- DIRECT EXECUTION ENTRY POINT ---
-if __name__ == "__main__":
-    definitions = [
-        BotDefinition(
-            file_path="bot:TeleportBot",
-            room_id=ROOM_ID,
-            api_token=API_TOKEN
-        )
-    ]
-    asyncio.run(run_bots(definitions))
 
 
 
