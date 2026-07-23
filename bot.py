@@ -155,34 +155,24 @@ class TeleportBot(BaseBot):
                 is_crew_member = False
                 
                 if not is_owner:
-                    # 1. TRY LIVE CACHE FIRST
                     try:
+                        # CRITICAL STABLE APPROACH: Check directly through room user details cache
                         room_users = await self.highrise.get_room_users()
                         for target_user, position in room_users.content:
                             if target_user.id == user.id:
-                                crew_obj = getattr(target_user, 'crew', None)
-                                if crew_obj:
-                                    extracted_id = getattr(crew_obj, 'id', None) or getattr(crew_obj, 'id_', None) or str(crew_obj)
-                                    print(f"[Live Room Cache Match] User: {user.username} | Crew ID: {extracted_id}", flush=True)
-                                    if str(extracted_id).strip() == str(CREW_ID).strip():
+                                # Safe check across all SDK variants for string format or structured values
+                                crew_id_attr = getattr(target_user, 'crew_id', None) or getattr(target_user, 'crew', None)
+                                
+                                if crew_id_attr:
+                                    # Handle if it's returning a structured sub-object or direct string matching
+                                    actual_id = getattr(crew_id_attr, 'id', None) or getattr(crew_id_attr, 'id_', None) or str(crew_id_attr)
+                                    print(f"[Crew Match Engine] User: {user.username} checked. ID: {actual_id}", flush=True)
+                                    
+                                    if str(actual_id).strip() == str(CREW_ID).strip():
                                         is_crew_member = True
-                                break
-                    except Exception as cache_err:
-                        print(f"[Cache Error] Room listing failed: {cache_err}", flush=True)
-
-                    # 2. SDK V24 FIX: USE WEBAPI BACKUP IF ROOM CACHE FAILED
-                    if not is_crew_member:
-                        try:
-                            # Using webapi instead of highrise to match SDK version 24.1.0
-                            user_info = await self.webapi.get_user_info(user.id)
-                            crew_obj = getattr(user_info, 'crew', None) or getattr(user_info, 'crew_id', None)
-                            if crew_obj:
-                                extracted_id = getattr(crew_obj, 'id', None) or getattr(crew_obj, 'id_', None) or str(crew_obj)
-                                print(f"[Web API Backup Match] User: {user.username} | Crew ID: {extracted_id}", flush=True)
-                                if str(extracted_id).strip() == str(CREW_ID).strip():
-                                    is_crew_member = True
-                        except Exception as api_err:
-                            print(f"[Web API Error] Profile lookup failed: {api_err}", flush=True)
+                                        break
+                    except Exception as cache_fail:
+                        print(f"[Live Check Muted] Room data list dropped: {cache_fail}", flush=True)
 
                 if is_crew_member or is_owner:
                     await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
