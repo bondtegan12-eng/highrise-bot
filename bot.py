@@ -31,6 +31,7 @@ threading.Thread(target=run_web_server, daemon=True).start()
 
 # --- HIGHRISE HARDCODED CONFIGURATION ---
 ROOM_ID = "64a094a74134ad0fd77b8734"
+API_TOKEN = "2c001cb06c4370e639be2d7a24cf4e7a0a860ef708d45d11cde0960653d0e8a6"
 CREW_ID = "69bf2d0c5654e2325acf9318"
 OWNER_USER_ID = "61ccb2a0fa2db3178100252c"
 VIP_TIP_THRESHOLD_GOLD = 500
@@ -60,7 +61,7 @@ class TeleportBot(BaseBot):
             cursor = conn.cursor()
             cursor.execute("SELECT gold_amount FROM tips WHERE user_id = ?", (user_id,))
             row = cursor.fetchone()
-            return row[0] if row else 0
+            return row if row else 0
 
     def _add_tip(self, user_id: str, amount: int) -> int:
         with sqlite3.connect(DB_PATH) as conn:
@@ -121,15 +122,18 @@ class TeleportBot(BaseBot):
             if new_total >= VIP_TIP_THRESHOLD_GOLD:
                 await self.highrise.chat(f"🎉 @{sender.username} has unlocked permanent VIP access by reaching {new_total}g tipped!")
 
-# --- THE MISSING SYSTEM LINK REQUIRED BY THE SDK RUNNER ---
-# This supplies the 3 values: file_path:class_name, room_id, and token
-bots = [
-    BotDefinition(
-        "bot:TeleportBot",
-        "64a094a74134ad0fd77b8734",
-        "2c001cb06c4370e639be2d7a24cf4e7a0a860ef708d45d11cde0960653d0e8a6"
-    )
-]
+# --- DIRECT EXECUTION ENTRY POINT ---
+if __name__ == "__main__":
+    definitions = [
+        BotDefinition(
+            bot_class_path="bot:TeleportBot",
+            room_id=ROOM_ID,
+            api_token=API_TOKEN
+        )
+    ]
+    # Run the Highrise engine directly using our defined configuration lists
+    asyncio.run(run_bots(definitions))
+
 
 
 
