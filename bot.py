@@ -73,7 +73,7 @@ class TeleportBot(BaseBot):
                 cursor = conn.cursor()
                 cursor.execute("SELECT gold_amount FROM tips WHERE user_id = ?", (user_id,))
                 row = cursor.fetchone()
-                return row[0] if row else 0
+                return row if row else 0
         except Exception:
             return 0
 
@@ -108,7 +108,7 @@ class TeleportBot(BaseBot):
                 cursor = conn.cursor()
                 cursor.execute("SELECT zone_command FROM active_zones WHERE user_id = ?", (user_id,))
                 row = cursor.fetchone()
-                return row[0] if row else None
+                return row if row else None
         except Exception:
             return None
 
@@ -170,12 +170,9 @@ class TeleportBot(BaseBot):
             command = clean_message.lower()
             is_owner = user.id == OWNER_USER_ID or user.username.lower() == OWNER_USERNAME.lower()
 
-            # SYSTEM COMMAND: Allows you to manually force-add past tippers instantly
             if command.startswith("!givevip "):
                 if is_owner:
                     target_username = clean_message.split(" ")[1].replace("@", "").strip().lower()
-                    
-                    # Look up their user ID inside the active live room mapping seamlessly
                     room_users = await self.highrise.get_room_users()
                     found_user = False
                     for target_user, position in room_users.content:
@@ -187,7 +184,7 @@ class TeleportBot(BaseBot):
                             found_user = True
                             break
                     if not found_user:
-                        await self.highrise.chat(f"Error: @{target_username} must be physically standing inside this room to grant them manual VIP access.")
+                        await self.highrise.chat(f"Error: @{target_username} must be standing in the room to use this.")
                 return
 
             if command == "!vip":
@@ -200,18 +197,22 @@ class TeleportBot(BaseBot):
 
             elif command == "!mod":
                 is_crew_member = False
-                
                 if not is_owner:
                     try:
                         raw_payload = str(user).lower()
                         if str(CREW_ID).strip() in raw_payload or hasattr(user, 'crew_id') or hasattr(user, 'crew'):
                             is_crew_member = True
-                            
                         if not is_crew_member:
                             room_users = await self.highrise.get_room_users()
                             for item in room_users.content:
                                 if hasattr(item, 'id') and item.id == user.id:
                                     if str(CREW_ID).strip() in str(item).lower():
+                                        is_crew_member = True
+                                        break
+                    except Exception:
+                        pass
+                if is_crew_member or is_owner:
+                    await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
 
 
 
