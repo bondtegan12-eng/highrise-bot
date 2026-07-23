@@ -8,6 +8,7 @@ import sqlite3
 import threading
 import time
 import sys
+import urllib.request
 from pathlib import Path
 
 from highrise import AnchorPosition, BaseBot, Position, User
@@ -31,7 +32,7 @@ threading.Thread(target=run_web_server, daemon=True).start()
 # --- HIGHRISE HARDCODED CONFIGURATION ---
 ROOM_ID = "64a094a74134ad0fd77b8734"
 OWNER_USER_ID = "61ccb2a0fa2db3178100252c"
-CREW_ID = "69bf2d0c5654e2325acf9318"  # Your Exact Verified Crew ID
+CREW_ID = "69bf2d0c5654e2325acf9318"  # Your Verified Crew ID
 VIP_TIP_THRESHOLD_GOLD = 500
 TARGET_DJ_USERNAME = "nxmb_"
 OWNER_USERNAME = "sexytegann"
@@ -138,6 +139,30 @@ class TeleportBot(BaseBot):
         except Exception as exc:
             print(f"[TeleportBot] Teleport failed for {user.username}: {exc}", flush=True)
 
+    async def _check_web_crew(self, user_id: str) -> bool:
+        try:
+            # Query the live Highrise Web API database safely in a non-blocking thread pool
+            url = f"https://highrise.game{user_id}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            
+            def fetch():
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    return json.loads(response.read().decode())
+                    
+            data = await asyncio.get_event_loop().run_in_executor(None, fetch)
+            
+            # Check the live database payload structure for the targeted crew ID
+            user_data = data.get('user', {})
+            crew_data = user_data.get('crew', {})
+            if crew_data:
+                api_crew_id = crew_data.get('id')
+                if str(api_crew_id).strip() == str(CREW_ID).strip():
+                    return True
+            return False
+        except Exception as api_err:
+            print(f"[Web API Muted] Live fetch issue: {api_err}", flush=True)
+            return False
+
     async def on_chat(self, user: User, message: str) -> None:
         try:
             command = message.strip().lower()
@@ -155,27 +180,8 @@ class TeleportBot(BaseBot):
                 is_crew_member = False
                 
                 if not is_owner:
-                    try:
-                        room_users = await self.highrise.get_room_users()
-                        for item in room_users.content:
-                            # Safely extract user and position data by index location
-                            target_user = item[0]
-                            target_position = item[1]
-                            
-                            if target_user.id == user.id:
-                                # Look for crew information attached directly to the user object attributes
-                                user_crew = getattr(target_user, 'crew_id', None) or getattr(target_user, 'crew', None)
-                                # Look for crew information attached directly to the position object attributes
-                                pos_crew = getattr(target_position, 'crew_id', None) or getattr(target_position, 'crew', None)
-                                
-                                final_crew_data = user_crew or pos_crew
-                                if final_crew_data:
-                                    extracted_id = getattr(final_crew_data, 'id', None) or getattr(final_crew_data, 'id_', None) or str(final_crew_data)
-                                    if str(extracted_id).strip() == str(CREW_ID).strip():
-                                        is_crew_member = True
-                                        break
-                    except Exception as cache_err:
-                        print(f"[Clean Loop Warning] Cache check skipped: {cache_err}", flush=True)
+                    # Run the crash-proof direct live background check
+                    is_crew_member = await self._check_web_crew(user.id)
 
                 if is_crew_member or is_owner:
                     await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
