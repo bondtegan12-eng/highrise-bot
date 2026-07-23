@@ -35,6 +35,9 @@ VIP_TIP_THRESHOLD_GOLD = 500
 TARGET_DJ_USERNAME = "nxmb_"
 OWNER_USERNAME = "sexytegann"
 
+# The message that will repeat every 5 minutes
+ANNOUNCEMENT_MESSAGE = "WELCOME TO BAMBS BDAY BASH JOIN THE PARTY -- tip me 500g for VIP!"
+
 TELEPORT_DESTINATIONS: dict[str, Position] = {
     "!vip": Position(x=17, y=9, z=18, facing="FrontRight"),
     "!mod": Position(x=6, y=9, z=29, facing="FrontRight"),
@@ -43,7 +46,6 @@ TELEPORT_DESTINATIONS: dict[str, Position] = {
 }
 
 # --- RAILWAY PERSISTENT DATABASE FIX ---
-# Checks for Railway's permanent data volume first, otherwise falls back safely
 if os.path.exists("/data"):
     DB_PATH = Path("/data/bot_data.db")
 else:
@@ -67,7 +69,7 @@ class TeleportBot(BaseBot):
                 cursor = conn.cursor()
                 cursor.execute("SELECT gold_amount FROM tips WHERE user_id = ?", (user_id,))
                 row = cursor.fetchone()
-                return row[0] if row else 0
+                return row if row else 0
         except Exception:
             return 0
 
@@ -96,29 +98,38 @@ class TeleportBot(BaseBot):
                 cursor = conn.cursor()
                 cursor.execute("SELECT zone_command FROM active_zones WHERE user_id = ?", (user_id,))
                 row = cursor.fetchone()
-                return row[0] if row else None
+                return row if row else None
         except Exception:
             return None
 
     async def on_start(self, session_metadata) -> None:
         print(f"[TeleportBot] Connected to Highrise room {ROOM_ID}")
+        # Start the 5-minute announcement loop inside the Highrise async timeline loop
+        asyncio.create_task(self._announcement_loop())
+
+    async def _announcement_loop(self) -> None:
+        """Sends the room advertisement text every 5 minutes (300 seconds)."""
+        while True:
+            await asyncio.sleep(300)  # Wait exactly 5 minutes
+            try:
+                print("[Timer] Sending automated room announcement...")
+                await self.highrise.chat(ANNOUNCEMENT_MESSAGE)
+            except Exception as announce_err:
+                print(f"[Timer Error] Could not send message: {announce_err}")
 
     async def on_user_join(self, user: User, position: Position | AnchorPosition) -> None:
-        # Check if this returning user was previously in a VIP or Mod zone first
         saved_zone = self._get_user_zone(user.id)
         if saved_zone in TELEPORT_DESTINATIONS:
             print(f"[Auto-Teleport] Returning {user.username} back to {saved_zone}")
             await self._delayed_teleport(user, TELEPORT_DESTINATIONS[saved_zone])
             return
 
-        # Trigger fallback DJ logic if no other manual zone was saved
         if user.username.lower() == TARGET_DJ_USERNAME.lower():
             await self._delayed_teleport(user, TELEPORT_DESTINATIONS["!dj"])
             return
 
-        # Send standard welcome message if they are spawning at normal ground level
         try:
-            await self.highrise.chat("WELCOME TO BAMBS BDAY BASH JOIN THE PARTY -- tip me 500g for VIP!")
+            await self.highrise.chat(ANNOUNCEMENT_MESSAGE)
         except Exception as exc:
             print(f"[TeleportBot] Failed welcome message: {exc}")
 
@@ -201,6 +212,7 @@ def start_bot_loop():
 
 if __name__ == "__main__":
     start_bot_loop()
+
 
 
 
