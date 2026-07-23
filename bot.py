@@ -121,5 +121,16 @@ class TeleportBot(BaseBot):
             if new_total >= VIP_TIP_THRESHOLD_GOLD:
                 await self.highrise.chat(f"🎉 @{sender.username} has unlocked permanent VIP access by reaching {new_total}g tipped!")
 
+# --- THE MISSING SYSTEM LINK REQUIRED BY THE SDK RUNNER ---
+# This supplies the 3 values: file_path:class_name, room_id, and token
+bots = [
+    BotDefinition(
+        "bot:TeleportBot",
+        "64a094a74134ad0fd77b8734",
+        "2c001cb06c4370e639be2d7a24cf4e7a0a860ef708d45d11cde0960653d0e8a6"
+    )
+]
+
+
 
 
