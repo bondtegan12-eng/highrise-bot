@@ -93,18 +93,22 @@ class TeleportBot(BaseBot):
         print(f"[TeleportBot] Connected to Highrise room {ROOM_ID}")
 
     async def on_user_join(self, user: User, position: Position | AnchorPosition) -> None:
+        # STEP 1: Always check the saved zone memory FIRST
+        saved_zone = self._get_user_zone(user.id)
+        if saved_zone in TELEPORT_DESTINATIONS:
+            print(f"[Auto-Teleport] Returning {user.username} back to {saved_zone}")
+            await self._delayed_teleport(user, TELEPORT_DESTINATIONS[saved_zone])
+            return
+
+        # STEP 2: Send the welcome message if they aren't auto-teleporting
         try:
             await self.highrise.chat("WELCOME TO BAMBS BDAY BASH JOIN THE PARTY -- tip me 500g for VIP!")
         except Exception as exc:
             print(f"[TeleportBot] Failed welcome message: {exc}")
 
+        # STEP 3: Fallback to active DJ logic if no other zone was saved
         if user.username.lower() == TARGET_DJ_USERNAME.lower():
             await self._delayed_teleport(user, TELEPORT_DESTINATIONS["!dj"])
-            return
-
-        saved_zone = self._get_user_zone(user.id)
-        if saved_zone in TELEPORT_DESTINATIONS:
-            await self._delayed_teleport(user, TELEPORT_DESTINATIONS[saved_zone])
 
     async def _delayed_teleport(self, user: User, position: Position, delay: float = 2.5) -> None:
         await asyncio.sleep(delay)
@@ -170,7 +174,7 @@ def start_bot_loop():
         BotDefinition(
             bot_class_path="bot:TeleportBot",
             room_id=ROOM_ID,
-            api_token="2c001cb06c4370e639be2d7a24cf4e7a0a860ef708d45d11cde0960653d0e8a6"
+            api_token="2c001cb06c4370e639be2d7a24cf4e7a0a8600ef708d45d11cde0960653d0e8a6"
         )
     ]
     
