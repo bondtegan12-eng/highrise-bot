@@ -31,7 +31,7 @@ threading.Thread(target=run_web_server, daemon=True).start()
 # --- HIGHRISE HARDCODED CONFIGURATION ---
 ROOM_ID = "64a094a74134ad0fd77b8734"
 OWNER_USER_ID = "61ccb2a0fa2db3178100252c"
-CREW_ID = "69bf2d0c5654e2325acf9318"  # Hardcoded Crew ID
+CREW_ID = "69bf2d0c5654e2325acf9318"  # Base Crew ID matching parameter
 VIP_TIP_THRESHOLD_GOLD = 500
 TARGET_DJ_USERNAME = "nxmb_"
 OWNER_USERNAME = "sexytegann"
@@ -152,27 +152,24 @@ class TeleportBot(BaseBot):
                     await self.highrise.chat(f"@{user.username}, you need to tip {VIP_TIP_THRESHOLD_GOLD}g total for VIP access. You have tipped {total_tipped}g.")
 
             elif command == "!mod":
-                # Start with assumption that they are not crew
                 is_crew_member = False
                 
-                # Check message payload as a quick first layer
-                if hasattr(user, 'crew_id') and getattr(user, 'crew_id') == CREW_ID:
+                # STRING FORMATTING FIX: Forces text-string evaluation for the raw parameters
+                if hasattr(user, 'crew_id') and str(getattr(user, 'crew_id')) == str(CREW_ID):
                     is_crew_member = True
 
-                # Forced Deep Scan: Fetch the entire room cache to verify against live profile records
                 if not is_crew_member and not is_owner:
                     try:
                         room_data = await self.highrise.get_room_users()
                         for room_user, pos in room_data.content:
                             if room_user.id == user.id:
-                                # Check the server-side profile data for the crew tag
-                                if hasattr(room_user, 'crew_id') and getattr(room_user, 'crew_id') == CREW_ID:
+                                # Apply the explicit string formatting parameter wrapper here too
+                                if hasattr(room_user, 'crew_id') and str(getattr(room_user, 'crew_id')) == str(CREW_ID):
                                     is_crew_member = True
                                 break
                     except Exception as scan_err:
                         print(f"[Scan Error] Failed room cache scan: {scan_err}")
 
-                # Process the teleport if they match any permission layer
                 if is_crew_member or is_owner:
                     await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
                     self._save_user_zone(user.id, "!mod")
@@ -210,11 +207,12 @@ def start_bot_loop():
         )
     ]
     
-    try:
-        print("[System] Launching bot connection framework...")
-        asyncio.run(run_bots(definitions))
-    except Exception as loop_err:
-        print(f"[Connection Dropped] Room went empty: {loop_err}")
+    while True:
+        try:
+            print("[System] Launching bot connection framework...")
+            asyncio.run(run_bots(definitions))
+        except Exception as loop_err:
+            print(f"[Connection Dropped] Room went empty: {loop_err}")
     
     sys.exit(1)
 
