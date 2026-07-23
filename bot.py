@@ -31,7 +31,7 @@ threading.Thread(target=run_web_server, daemon=True).start()
 # --- HIGHRISE HARDCODED CONFIGURATION ---
 ROOM_ID = "64a094a74134ad0fd77b8734"
 OWNER_USER_ID = "61ccb2a0fa2db3178100252c"
-CREW_ID = "69bf2d0c5654e2325acf9318"  # Your Verified Crew ID
+CREW_ID = "69bf2d0c5654e2325acf9318"  # Your Exact Crew ID
 VIP_TIP_THRESHOLD_GOLD = 500
 TARGET_DJ_USERNAME = "nxmb_"
 OWNER_USERNAME = "sexytegann"
@@ -69,7 +69,7 @@ class TeleportBot(BaseBot):
                 cursor = conn.cursor()
                 cursor.execute("SELECT gold_amount FROM tips WHERE user_id = ?", (user_id,))
                 row = cursor.fetchone()
-                return row if row else 0
+                return row[0] if row else 0
         except Exception:
             return 0
 
@@ -98,7 +98,7 @@ class TeleportBot(BaseBot):
                 cursor = conn.cursor()
                 cursor.execute("SELECT zone_command FROM active_zones WHERE user_id = ?", (user_id,))
                 row = cursor.fetchone()
-                return row if row else None
+                return row[0] if row else None
         except Exception:
             return None
 
@@ -156,24 +156,27 @@ class TeleportBot(BaseBot):
                 
                 if not is_owner:
                     try:
+                        # Call Highrise Web API profile endpoint directly
                         user_info = await self.highrise.get_user_info(user.id)
                         
-                        # Grab the crew attribute structure safely
-                        crew_attr = getattr(user_info, 'crew', None) or getattr(user_info, 'crew_id', None)
-                        
-                        # High-utility logging to verify what the SDK provides in your Railway terminal
-                        print(f"[Crew Debug] User: {user.username} | Raw Attribute Type: {type(crew_attr)} | Value: {crew_attr}")
-                        
-                        if crew_attr:
-                            # Safely extract internal properties if it is an object, or treat it as a direct string
-                            extracted_id = getattr(crew_attr, 'id', None) or getattr(crew_attr, 'id_', None) or crew_attr
-                            print(f"[Crew Debug] Extracted ID for match: {extracted_id}")
+                        # Check if user has a crew profile entry attached
+                        if hasattr(user_info, 'crew') and user_info.crew is not None:
+                            # Safely extract the inner string ID from the Highrise Crew data object
+                            extracted_id = getattr(user_info.crew, 'id', None) or getattr(user_info.crew, 'id_', None) or str(user_info.crew)
+                            
+                            # Diagnostic verification for your Railway Live Log streams
+                            print(f"[Crew Verification] Processing {user.username} | Checking ID: {extracted_id}")
                             
                             if str(extracted_id).strip() == str(CREW_ID).strip():
                                 is_crew_member = True
+                        
+                        # Fallback backup parameter checks if SDK formats it flatly as a dictionary or different property names
+                        elif hasattr(user_info, 'crew_id') and user_info.crew_id is not None:
+                            if str(user_info.crew_id).strip() == str(CREW_ID).strip():
+                                is_crew_member = True
                                 
                     except Exception as crew_err:
-                        print(f"[Crew Check Error] Failed to get user info: {crew_err}")
+                        print(f"[Crew System Error] Profile check failed for {user.username}: {crew_err}")
 
                 if is_crew_member or is_owner:
                     await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
@@ -193,6 +196,7 @@ class TeleportBot(BaseBot):
                     
         except Exception as chat_err:
             print(f"[Chat Error] Problem handling message: {chat_err}")
+
 
 
 
