@@ -69,7 +69,7 @@ class TeleportBot(BaseBot):
                 cursor = conn.cursor()
                 cursor.execute("SELECT gold_amount FROM tips WHERE user_id = ?", (user_id,))
                 row = cursor.fetchone()
-                return row[0] if row else 0
+                return row if row else 0
         except Exception:
             return 0
 
@@ -98,7 +98,7 @@ class TeleportBot(BaseBot):
                 cursor = conn.cursor()
                 cursor.execute("SELECT zone_command FROM active_zones WHERE user_id = ?", (user_id,))
                 row = cursor.fetchone()
-                return row[0] if row else None
+                return row if row else None
         except Exception:
             return None
 
@@ -157,16 +157,25 @@ class TeleportBot(BaseBot):
                 if not is_owner:
                     try:
                         room_users = await self.highrise.get_room_users()
-                        for target_user, position in room_users.content:
+                        for item in room_users.content:
+                            # Safely extract user and position data by index location
+                            target_user = item[0]
+                            target_position = item[1]
+                            
                             if target_user.id == user.id:
-                                # Convert the room entry to a clean dictionary structure 
-                                # This checks both the unmapped user and position data properties instantly
-                                data_dump = json.dumps(target_user, default=lambda o: o.__dict__) + json.dumps(position, default=lambda o: o.__dict__)
-                                if str(CREW_ID) in data_dump:
-                                    is_crew_member = True
-                                    break
+                                # Look for crew information attached directly to the user object attributes
+                                user_crew = getattr(target_user, 'crew_id', None) or getattr(target_user, 'crew', None)
+                                # Look for crew information attached directly to the position object attributes
+                                pos_crew = getattr(target_position, 'crew_id', None) or getattr(target_position, 'crew', None)
+                                
+                                final_crew_data = user_crew or pos_crew
+                                if final_crew_data:
+                                    extracted_id = getattr(final_crew_data, 'id', None) or getattr(final_crew_data, 'id_', None) or str(final_crew_data)
+                                    if str(extracted_id).strip() == str(CREW_ID).strip():
+                                        is_crew_member = True
+                                        break
                     except Exception as cache_err:
-                        print(f"[Cache Warning] Fallback execution: {cache_err}", flush=True)
+                        print(f"[Clean Loop Warning] Cache check skipped: {cache_err}", flush=True)
 
                 if is_crew_member or is_owner:
                     await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
@@ -186,8 +195,6 @@ class TeleportBot(BaseBot):
                     
         except Exception as chat_err:
             print(f"[Chat Error] Problem handling message: {chat_err}", flush=True)
-
-
 
 
 
