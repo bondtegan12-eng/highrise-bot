@@ -169,9 +169,10 @@ class TeleportBot(BaseBot):
         command = clean_message.lower()
         is_owner = user.id == OWNER_USER_ID or user.username.lower() == OWNER_USERNAME.lower()
 
+        # Handle Management Command
         if command.startswith("!givevip "):
             if is_owner:
-                target_username = clean_message.split(" ").replace("@", "").strip().lower()
+                target_username = clean_message.split(" ")[1].replace("@", "").strip().lower()
                 room_users = await self.highrise.get_room_users()
                 found_user = False
                 for target_user, position in room_users.content:
@@ -186,7 +187,12 @@ class TeleportBot(BaseBot):
                     await self.highrise.chat(f"Error: @{target_username} must be standing in the room to use this.")
             return
 
-        if command == "!vip":
+        # Handle Teleportation Commands
+        if command == "!f1":
+            await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!f1"])
+            self._clear_user_zone(user.id)
+
+        elif command == "!vip":
             total_tipped = self._get_tip_total(user.id)
             if total_tipped >= VIP_TIP_THRESHOLD_GOLD or is_owner:
                 await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!vip"])
@@ -212,10 +218,6 @@ class TeleportBot(BaseBot):
                     pass
             if is_crew_member or is_owner:
                 await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
-                self._save_user_zone(user.id, "!mod")
-            else:
-                await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
-                self._save_user_zone(user.id, "!mod")
 
 
 
