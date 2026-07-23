@@ -31,20 +31,12 @@ threading.Thread(target=run_web_server, daemon=True).start()
 # --- HIGHRISE HARDCODED CONFIGURATION ---
 ROOM_ID = "64a094a74134ad0fd77b8734"
 OWNER_USER_ID = "61ccb2a0fa2db3178100252c"
-CREW_ID = "69bf2d0c5654e2325acf9318" 
+CREW_ID = "69bf2d0c5654e2325acf9318"  # Hardcoded Crew ID
 VIP_TIP_THRESHOLD_GOLD = 500
 TARGET_DJ_USERNAME = "nxmb_"
 OWNER_USERNAME = "sexytegann"
 
 ANNOUNCEMENT_MESSAGE = "WELCOME TO BAMBS BDAY BASH JOIN THE PARTY -- tip me 500g for VIP!"
-
-# --- BACKUP CREW USERNAMES LIST ---
-# If a crew member's tag is hidden, add their username here (all lowercase, no @ symbol)
-# separated by commas, like this: {"username1", "username2"}
-BACKUP_CREW_USERNAMES: set[str] = {
-    "sexytegann",
-    # "put_crew_username_here",
-}
 
 TELEPORT_DESTINATIONS: dict[str, Position] = {
     "!vip": Position(x=17, y=9, z=18, facing="FrontRight"),
@@ -160,25 +152,32 @@ class TeleportBot(BaseBot):
                     await self.highrise.chat(f"@{user.username}, you need to tip {VIP_TIP_THRESHOLD_GOLD}g total for VIP access. You have tipped {total_tipped}g.")
 
             elif command == "!mod":
-                # Double-check permissions: check crew tag, then owner status, then backup username list
+                # Start with assumption that they are not crew
                 is_crew_member = False
+                
+                # Check message payload as a quick first layer
                 if hasattr(user, 'crew_id') and getattr(user, 'crew_id') == CREW_ID:
                     is_crew_member = True
-                
-                is_backup_username = user.username.lower() in BACKUP_CREW_USERNAMES
 
-                if is_crew_member or is_owner or is_backup_username:
+                # Forced Deep Scan: Fetch the entire room cache to verify against live profile records
+                if not is_crew_member and not is_owner:
+                    try:
+                        room_data = await self.highrise.get_room_users()
+                        for room_user, pos in room_data.content:
+                            if room_user.id == user.id:
+                                # Check the server-side profile data for the crew tag
+                                if hasattr(room_user, 'crew_id') and getattr(room_user, 'crew_id') == CREW_ID:
+                                    is_crew_member = True
+                                break
+                    except Exception as scan_err:
+                        print(f"[Scan Error] Failed room cache scan: {scan_err}")
+
+                # Process the teleport if they match any permission layer
+                if is_crew_member or is_owner:
                     await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
                     self._save_user_zone(user.id, "!mod")
                 else:
-                    # Final cache check before failing
-                    room_data = await self.highrise.get_room_users()
-                    cached_user = next((u for u in room_data.content if u.id == user.id), None)
-                    if cached_user and hasattr(cached_user, 'crew_id') and getattr(cached_user, 'crew_id') == CREW_ID:
-                        await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
-                        self._save_user_zone(user.id, "!mod")
-                    else:
-                        await self.highrise.chat(f"@{user.username}, only members of our Crew can use !mod.")
+                    await self.highrise.chat(f"@{user.username}, only members of our Crew can use !mod.")
 
             elif command == "!dj":
                 if user.username.lower() == TARGET_DJ_USERNAME.lower() or is_owner:
@@ -217,7 +216,6 @@ def start_bot_loop():
     except Exception as loop_err:
         print(f"[Connection Dropped] Room went empty: {loop_err}")
     
-    # Tricks Railway into restarting the bot whenever the connection drops
     sys.exit(1)
 
 if __name__ == "__main__":
