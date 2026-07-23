@@ -126,13 +126,13 @@ class TeleportBot(BaseBot):
 if __name__ == "__main__":
     definitions = [
         BotDefinition(
-            bot_class_path="bot:TeleportBot",
+            file_path="bot:TeleportBot",
             room_id=ROOM_ID,
             api_token=API_TOKEN
         )
     ]
-    # Run the Highrise engine directly using our defined configuration lists
     asyncio.run(run_bots(definitions))
+
 
 
 
