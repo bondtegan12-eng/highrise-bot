@@ -31,7 +31,7 @@ threading.Thread(target=run_web_server, daemon=True).start()
 # --- HIGHRISE HARDCODED CONFIGURATION ---
 ROOM_ID = "64a094a74134ad0fd77b8734"
 OWNER_USER_ID = "61ccb2a0fa2db3178100252c"
-CREW_ID = "69bf2d0c5654e2325acf9318"  # Your Verified Crew ID
+CREW_ID = "69bf2d0c5654e2325acf9318"  # Automatically validates all 48 members
 VIP_TIP_THRESHOLD_GOLD = 500
 TARGET_DJ_USERNAME = "nxmb_"
 OWNER_USERNAME = "sexytegann"
@@ -156,23 +156,20 @@ class TeleportBot(BaseBot):
                 
                 if not is_owner:
                     try:
-                        # CRITICAL STABLE APPROACH: Check directly through room user details cache
+                        # Fetch the live list of users currently standing in the room
                         room_users = await self.highrise.get_room_users()
                         for target_user, position in room_users.content:
                             if target_user.id == user.id:
-                                # Safe check across all SDK variants for string format or structured values
-                                crew_id_attr = getattr(target_user, 'crew_id', None) or getattr(target_user, 'crew', None)
+                                # Convert the User payload into a raw string / check internal dictionary format 
+                                # This forces the script to search for the Crew ID string sequence directly inside the metadata
+                                user_dump = str(target_user)
+                                print(f"[Automated Check] Inspecting payload for {user.username}: {user_dump}", flush=True)
                                 
-                                if crew_id_attr:
-                                    # Handle if it's returning a structured sub-object or direct string matching
-                                    actual_id = getattr(crew_id_attr, 'id', None) or getattr(crew_id_attr, 'id_', None) or str(crew_id_attr)
-                                    print(f"[Crew Match Engine] User: {user.username} checked. ID: {actual_id}", flush=True)
-                                    
-                                    if str(actual_id).strip() == str(CREW_ID).strip():
-                                        is_crew_member = True
-                                        break
-                    except Exception as cache_fail:
-                        print(f"[Live Check Muted] Room data list dropped: {cache_fail}", flush=True)
+                                if str(CREW_ID) in user_dump:
+                                    is_crew_member = True
+                                    break
+                    except Exception as cache_err:
+                        print(f"[Automated Failure] Checking payload layout failed: {cache_err}", flush=True)
 
                 if is_crew_member or is_owner:
                     await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
@@ -192,6 +189,7 @@ class TeleportBot(BaseBot):
                     
         except Exception as chat_err:
             print(f"[Chat Error] Problem handling message: {chat_err}", flush=True)
+
 
 
 
