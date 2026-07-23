@@ -6,11 +6,12 @@ import json
 import os
 import sqlite3
 import threading
+import time
 from pathlib import Path
 
 from highrise import AnchorPosition, BaseBot, Position, User
 
-# --- WEB SERVER WORKAROUND FOR RENDER FREE ---
+# --- WEB SERVER WORKAROUND ---
 class KeepAliveServer(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -24,10 +25,9 @@ def run_web_server():
     print(f"[Web Server] Keeping bot awake on port {port}")
     server.serve_forever()
 
-# Start the web server thread immediately so Render's health check passes
 threading.Thread(target=run_web_server, daemon=True).start()
 
-# --- HIGHRISE HARDCODED CONFIGURATION ---
+# --- HIGHRISE CONFIGURATION ---
 ROOM_ID = "64a094a74134ad0fd77b8734"
 OWNER_USER_ID = "61ccb2a0fa2db3178100252c"
 CREW_ID = "69bf2d0c5654e2325acf9318" 
@@ -35,12 +35,11 @@ VIP_TIP_THRESHOLD_GOLD = 500
 TARGET_DJ_USERNAME = "nxmb_"
 OWNER_USERNAME = "sexytegann"
 
-# Teleport positions (Added !f1 ground floor destination)
 TELEPORT_DESTINATIONS: dict[str, Position] = {
     "!vip": Position(x=17, y=9, z=18, facing="FrontRight"),
     "!mod": Position(x=6, y=9, z=29, facing="FrontRight"),
     "!dj": Position(x=16, y=0, z=24, facing="FrontRight"),
-    "!f1": Position(x=10, y=0, z=10, facing="FrontRight"),  # Ground floor coordinates
+    "!f1": Position(x=10, y=0, z=10, facing="FrontRight"),
 }
 
 DB_PATH = Path("bot_data.db")
@@ -62,7 +61,7 @@ class TeleportBot(BaseBot):
             cursor = conn.cursor()
             cursor.execute("SELECT gold_amount FROM tips WHERE user_id = ?", (user_id,))
             row = cursor.fetchone()
-            return row[0] if row else 0
+            return row if row else 0
 
     def _add_tip(self, user_id: str, amount: int) -> int:
         with sqlite3.connect(DB_PATH) as conn:
@@ -88,7 +87,7 @@ class TeleportBot(BaseBot):
             cursor = conn.cursor()
             cursor.execute("SELECT zone_command FROM active_zones WHERE user_id = ?", (user_id,))
             row = cursor.fetchone()
-            return row[0] if row else None
+            return row if row else None
 
     async def on_start(self, session_metadata) -> None:
         print(f"[TeleportBot] Connected to Highrise room {ROOM_ID}")
@@ -99,15 +98,12 @@ class TeleportBot(BaseBot):
         except Exception as exc:
             print(f"[TeleportBot] Failed welcome message: {exc}")
 
-        # Auto-teleport targeted user nxmb_ to DJ area when they join
         if user.username.lower() == TARGET_DJ_USERNAME.lower():
             await self._delayed_teleport(user, TELEPORT_DESTINATIONS["!dj"])
             return
 
-        # Check if this returning user was previously in a VIP or Mod zone
         saved_zone = self._get_user_zone(user.id)
         if saved_zone in TELEPORT_DESTINATIONS:
-            print(f"[Auto-Teleport] Returning {user.username} back to {saved_zone}")
             await self._delayed_teleport(user, TELEPORT_DESTINATIONS[saved_zone])
 
     async def _delayed_teleport(self, user: User, position: Position, delay: float = 2.5) -> None:
@@ -124,11 +120,11 @@ class TeleportBot(BaseBot):
             
             if command == "!vip":
                 total_tipped = self._get_tip_total(user.id)
-                if total_tipped >= VIP_TOP_THRESHOLD_GOLD or is_owner:
+                if total_tipped >= VIP_TIP_THRESHOLD_GOLD or is_owner:
                     await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!vip"])
                     self._save_user_zone(user.id, "!vip")
                 else:
-                    await self.highrise.chat(f"@{user.username}, you need to tip {VIP_TOP_THRESHOLD_GOLD}g total for VIP access. You have tipped {total_tipped}g.")
+                    await self.highrise.chat(f"@{user.username}, you need to tip {VIP_TIP_THRESHOLD_GOLD}g total for VIP access. You have tipped {total_tipped}g.")
 
             elif command == "!mod":
                 is_crew_member = False
@@ -154,7 +150,6 @@ class TeleportBot(BaseBot):
                     await self.highrise.chat(f"@{user.username}, only @{TARGET_DJ_USERNAME} can use !dj.")
 
             elif command == "!f1":
-                # Anyone can use !f1 to go down. It drops them at the ground floor and clears their spawn memory.
                 await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!f1"])
                 self._clear_user_zone(user.id)
                     
@@ -166,5 +161,30 @@ class TeleportBot(BaseBot):
             new_total = self._add_tip(sender.id, tip.amount)
             if new_total >= VIP_TIP_THRESHOLD_GOLD:
                 await self.highrise.chat(f"🎉 @{sender.username} has unlocked permanent VIP access by reaching {new_total}g tipped!")
+
+# --- PERSISTENT LOOP RUNNER ---
+def start_bot_loop():
+    from highrise.__main__ import BotDefinition, main as run_bots
+    
+    definitions = [
+        BotDefinition(
+            bot_class_path="bot:TeleportBot",
+            room_id=ROOM_ID,
+            api_token="2c001cb06c4370e639be2d7a24cf4e7a0a860ef708d45d11cde0960653d0e8a6"
+        )
+    ]
+    
+    while True:
+        try:
+            print("[System] Launching bot connection framework...")
+            asyncio.run(run_bots(definitions))
+        except Exception as loop_err:
+            print(f"[Connection Dropped] Room went empty or disconnected: {loop_err}")
+            print("[System] Waiting 10 seconds before auto-rejoining...")
+            time.sleep(10)
+
+if __name__ == "__main__":
+    start_bot_loop()
+
 
 
