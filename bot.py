@@ -84,6 +84,12 @@ class TeleportBot(BaseBot):
             conn.commit()
         return self._get_tip_total(user_id)
 
+    def _force_set_vip(self, user_id: str) -> None:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO tips (user_id, gold_amount) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET gold_amount = ?", (user_id, VIP_TIP_THRESHOLD_GOLD, VIP_TIP_THRESHOLD_GOLD))
+            conn.commit()
+
     def _save_user_zone(self, user_id: str, zone_command: str) -> None:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
@@ -125,7 +131,6 @@ class TeleportBot(BaseBot):
         except Exception as exc:
             print(f"[TeleportBot] Failed welcome message: {exc}", flush=True)
 
-        # FIXED PERSISTENCE ENGINE: Check their actual gold total first. !f1 can never break this.
         total_tipped = self._get_tip_total(user.id)
         if total_tipped >= VIP_TIP_THRESHOLD_GOLD:
             print(f"[VIP Rejoin Verified] User: {user.username} has permanent VIP record.", flush=True)
@@ -161,8 +166,29 @@ class TeleportBot(BaseBot):
 
     async def on_chat(self, user: User, message: str) -> None:
         try:
-            command = message.strip().lower()
+            clean_message = message.strip()
+            command = clean_message.lower()
             is_owner = user.id == OWNER_USER_ID or user.username.lower() == OWNER_USERNAME.lower()
+
+            # SYSTEM COMMAND: Allows you to manually force-add past tippers instantly
+            if command.startswith("!givevip "):
+                if is_owner:
+                    target_username = clean_message.split(" ")[1].replace("@", "").strip().lower()
+                    
+                    # Look up their user ID inside the active live room mapping seamlessly
+                    room_users = await self.highrise.get_room_users()
+                    found_user = False
+                    for target_user, position in room_users.content:
+                        if target_user.username.lower() == target_username:
+                            self._force_set_vip(target_user.id)
+                            await self.highrise.chat(f"💎 Manually added @{target_user.username} to VIP. They can use !vip permanently now!")
+                            await self.highrise.teleport(target_user.id, TELEPORT_DESTINATIONS["!vip"])
+                            self._save_user_zone(target_user.id, "!vip")
+                            found_user = True
+                            break
+                    if not found_user:
+                        await self.highrise.chat(f"Error: @{target_username} must be physically standing inside this room to grant them manual VIP access.")
+                return
 
             if command == "!vip":
                 total_tipped = self._get_tip_total(user.id)
@@ -186,31 +212,6 @@ class TeleportBot(BaseBot):
                             for item in room_users.content:
                                 if hasattr(item, 'id') and item.id == user.id:
                                     if str(CREW_ID).strip() in str(item).lower():
-                                        is_crew_member = True
-                                        break
-                    except Exception:
-                        pass
-
-                if is_crew_member or is_owner:
-                    await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
-                    self._save_user_zone(user.id, "!mod")
-                else:
-                    await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
-                    self._save_user_zone(user.id, "!mod")
-
-            elif command == "!dj":
-                if user.username.lower() == TARGET_DJ_USERNAME.lower() or is_owner:
-                    await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!dj"])
-                else:
-                    await self.highrise.chat(f"@{user.username}, only @{TARGET_DJ_USERNAME} can use !dj.")
-
-            elif command == "!f1":
-                await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!f1"])
-                # SAFE RESET: We clear their active zone, but their gold total inside the tips table remains untouched!
-                self._clear_user_zone(user.id)
-                    
-        except Exception as chat_err:
-            print(f"[Chat Error] Problem handling message: {chat_err}", flush=True)
 
 
 
