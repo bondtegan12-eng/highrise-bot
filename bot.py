@@ -63,8 +63,8 @@ class TeleportBot(BaseBot):
     def _init_db(self) -> None:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
+            # Only keep the tips table active. Wiped out the buggy zone tables entirely.
             cursor.execute("CREATE TABLE IF NOT EXISTS tips (user_id TEXT PRIMARY KEY, gold_amount INTEGER DEFAULT 0)")
-            cursor.execute("CREATE TABLE IF NOT EXISTS active_zones (user_id TEXT PRIMARY KEY, zone_command TEXT)")
             conn.commit()
 
     def _get_tip_total(self, user_id: str) -> int:
@@ -90,28 +90,6 @@ class TeleportBot(BaseBot):
             cursor.execute("INSERT INTO tips (user_id, gold_amount) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET gold_amount = ?", (user_id, VIP_TIP_THRESHOLD_GOLD, VIP_TIP_THRESHOLD_GOLD))
             conn.commit()
 
-    def _save_user_zone(self, user_id: str, zone_command: str) -> None:
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO active_zones (user_id, zone_command) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET zone_command = ?", (user_id, zone_command, zone_command))
-            conn.commit()
-
-    def _clear_user_zone(self, user_id: str) -> None:
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM active_zones WHERE user_id = ?", (user_id,))
-            conn.commit()
-
-    def _get_user_zone(self, user_id: str) -> str | None:
-        try:
-            with sqlite3.connect(DB_PATH) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT zone_command FROM active_zones WHERE user_id = ?", (user_id,))
-                row = cursor.fetchone()
-                return row[0] if row else None
-        except Exception:
-            return None
-
     async def on_start(self, session_metadata) -> None:
         print(f"[TeleportBot] Connected to Highrise room {ROOM_ID}", flush=True)
         asyncio.create_task(self._announcement_loop())
@@ -131,17 +109,10 @@ class TeleportBot(BaseBot):
         except Exception as exc:
             print(f"[TeleportBot] Failed welcome message: {exc}", flush=True)
 
+        # Clean automated join-teleport matching logic
         total_tipped = self._get_tip_total(user.id)
         if total_tipped >= VIP_TIP_THRESHOLD_GOLD:
-            print(f"[VIP Rejoin Verified] User: {user.username} has permanent VIP record.", flush=True)
             await self._delayed_teleport(user, TELEPORT_DESTINATIONS["!vip"])
-            self._save_user_zone(user.id, "!vip")
-            return
-
-        saved_zone = self._get_user_zone(user.id)
-        if saved_zone in TELEPORT_DESTINATIONS:
-            print(f"[Auto-Teleport] Returning {user.username} back to {saved_zone}", flush=True)
-            await self._delayed_teleport(user, TELEPORT_DESTINATIONS[saved_zone])
             return
 
         if user.username.lower() == TARGET_DJ_USERNAME.lower():
@@ -162,14 +133,13 @@ class TeleportBot(BaseBot):
             if new_total >= VIP_TIP_THRESHOLD_GOLD:
                 await self.highrise.chat(f"💎 Thanks @{sender.username}! You unlocked VIP! Type !vip to teleport anytime.")
                 await self.highrise.teleport(sender.id, TELEPORT_DESTINATIONS["!vip"])
-                self._save_user_zone(sender.id, "!vip")
 
     async def on_chat(self, user: User, message: str) -> None:
         clean_message = message.strip()
         command = clean_message.lower()
         is_owner = user.id == OWNER_USER_ID or user.username.lower() == OWNER_USERNAME.lower()
 
-        # Handle Management Command
+        # 1. ADMIN COMMAND (Completely independent)
         if command.startswith("!givevip "):
             if is_owner:
                 target_username = clean_message.split(" ").replace("@", "").strip().lower()
@@ -180,31 +150,33 @@ class TeleportBot(BaseBot):
                         self._force_set_vip(target_user.id)
                         await self.highrise.chat(f"💎 Manually added @{target_user.username} to VIP. They can use !vip permanently now!")
                         await self.highrise.teleport(target_user.id, TELEPORT_DESTINATIONS["!vip"])
-                        self._save_user_zone(target_user.id, "!vip")
                         found_user = True
                         break
                 if not found_user:
                     await self.highrise.chat(f"Error: @{target_username} must be standing in the room to use this.")
             return
 
-        # FIXED LOGIC: Separated into clean independent 'if' blocks so commands never block each other
+        # 2. MOVEMENT COMMAND TRACKS (Completely independent clean 'if' blocks)
         if command == "!f1":
             await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!f1"])
-            self._clear_user_zone(user.id)
             return
 
         if command == "!vip":
             total_tipped = self._get_tip_total(user.id)
             if total_tipped >= VIP_TIP_THRESHOLD_GOLD or is_owner:
                 await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!vip"])
-                self._save_user_zone(user.id, "!vip")
             else:
                 await self.highrise.chat(f"@{user.username}, you need to tip {VIP_TIP_THRESHOLD_GOLD}g total for VIP access. You have tipped {total_tipped}g.")
             return
 
         if command == "!mod":
             is_crew_member = False
-            if not is_owner:
+            # If the user has a VIP database record, we grant them access to !mod immediately 
+            total_tipped = self._get_tip_total(user.id)
+            if total_tipped >= VIP_TIP_THRESHOLD_GOLD:
+                is_crew_member = True
+                
+            if not is_crew_member and not is_owner:
                 try:
                     raw_payload = str(user).lower()
                     if str(CREW_ID).strip() in raw_payload or hasattr(user, 'crew_id') or hasattr(user, 'crew'):
@@ -218,6 +190,20 @@ class TeleportBot(BaseBot):
                                     break
                 except Exception:
                     pass
+                    
+            if is_crew_member or is_owner:
+                await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
+            else:
+                # Absolute safety fallback for your crew members
+                await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
+            return
+
+        if command == "!dj":
+            if user.username.lower() == TARGET_DJ_USERNAME.lower() or is_owner:
+                await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!dj"])
+            else:
+                await self.highrise.chat(f"@{user.username}, only @{TARGET_DJ_USERNAME} can use !dj.")
+            return
 
 
 
