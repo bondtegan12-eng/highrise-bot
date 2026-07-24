@@ -73,7 +73,7 @@ class TeleportBot(BaseBot):
                 cursor = conn.cursor()
                 cursor.execute("SELECT gold_amount FROM tips WHERE user_id = ?", (user_id,))
                 row = cursor.fetchone()
-                return row if row else 0
+                return row[0] if row else 0
         except Exception:
             return 0
 
@@ -108,7 +108,7 @@ class TeleportBot(BaseBot):
                 cursor = conn.cursor()
                 cursor.execute("SELECT zone_command FROM active_zones WHERE user_id = ?", (user_id,))
                 row = cursor.fetchone()
-                return row if row else None
+                return row[0] if row else None
         except Exception:
             return None
 
@@ -172,7 +172,7 @@ class TeleportBot(BaseBot):
         # Handle Management Command
         if command.startswith("!givevip "):
             if is_owner:
-                target_username = clean_message.split(" ")[1].replace("@", "").strip().lower()
+                target_username = clean_message.split(" ").replace("@", "").strip().lower()
                 room_users = await self.highrise.get_room_users()
                 found_user = False
                 for target_user, position in room_users.content:
@@ -187,20 +187,22 @@ class TeleportBot(BaseBot):
                     await self.highrise.chat(f"Error: @{target_username} must be standing in the room to use this.")
             return
 
-        # Handle Teleportation Commands
+        # FIXED LOGIC: Separated into clean independent 'if' blocks so commands never block each other
         if command == "!f1":
             await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!f1"])
             self._clear_user_zone(user.id)
+            return
 
-        elif command == "!vip":
+        if command == "!vip":
             total_tipped = self._get_tip_total(user.id)
             if total_tipped >= VIP_TIP_THRESHOLD_GOLD or is_owner:
                 await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!vip"])
                 self._save_user_zone(user.id, "!vip")
             else:
                 await self.highrise.chat(f"@{user.username}, you need to tip {VIP_TIP_THRESHOLD_GOLD}g total for VIP access. You have tipped {total_tipped}g.")
+            return
 
-        elif command == "!mod":
+        if command == "!mod":
             is_crew_member = False
             if not is_owner:
                 try:
@@ -216,8 +218,7 @@ class TeleportBot(BaseBot):
                                     break
                 except Exception:
                     pass
-            if is_crew_member or is_owner:
-                await self.highrise.teleport(user.id, TELEPORT_DESTINATIONS["!mod"])
+
 
 
 
